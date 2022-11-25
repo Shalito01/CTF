@@ -1,4 +1,4 @@
 # Hunting HTB
 ---
 
-![[CTF/HTB/Pwn/README]]
+![[PWN_Basics]]
