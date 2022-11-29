@@ -165,3 +165,18 @@ The stack has read-write permission and is executable.
 - [[Format String Vulnerability]]
 - [[Heap Overflow]]
 
+## Security techniques
+
+Security techniques were invented to prevent exploitation of the programs. Each of them is aimed at concrete vulnerability. In general, these techniques are just compiler options or OS configuration.
+
+- [[Non-Executable Stack(NX)]]
+- [[Address Space Layout Randomization(ASLR)]]
+- [[Stack Canary]]
+- [[Position Indipendent Executable(PIE)]]
+- [[Relocation Read-Only(RELRO)]]
+
+## Bypass Security Techniques
+
+- [[Ret2libc|Return-to-libc attack(ret2libc)]]
+- [[ROP|Return-oriented programming(ROP)]]
+
