@@ -40,8 +40,7 @@ We found 2 js files:
 - main-bundle.js
 - dev-48644bcc829deeffe29e-bundle.js
 
-![main-bundle](./main-bundle.png)
-![dev-bundle](./dev-bundle.png)
+![main-bundle|width=250px](./main-bundle.png) ![dev-bundle|with=250px](./dev-bundle.png)
 
 In the first file I found an instresting api endpoint `/testing/dev/api/register`, but only developers can access this endpoint. So moving on the second file we can see that the function is preparing a Cookie header, and with some console.log we get the full cookie string: `Cookie: x-debug-key-v3=038663befb1ad868a62035cf5d685adb`.
 
