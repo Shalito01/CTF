@@ -30,7 +30,7 @@ by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
 ```
 As we can see we are always redirected to login page.
 The nmap script also returns the presence of `robots.txt`, which shows 1 disallowed entry: `/static/CHANGELOG.txt`:
-![CHANGELOG](./changelog.png)
+![CHANGELOG|width=250px](./changelog.png)
 
 We can see some usefull info:
 On version 2.3.0 it has been added the manifest plugin, with a bit of research i found that this plugin saves its configuration file in /static/manifest.json
@@ -40,8 +40,7 @@ We found 2 js files:
 - main-bundle.js
 - dev-48644bcc829deeffe29e-bundle.js
 
-![main-bundle](./main-bundle.png)
-![dev-bundle](./dev-bundle.png)
+![main-bundle|width=250px](./main-bundle.png) ![dev-bundle|with=250px](./dev-bundle.png)
 
 In the first file I found an instresting api endpoint `/testing/dev/api/register`, but only developers can access this endpoint. So moving on the second file we can see that the function is preparing a Cookie header, and with some console.log we get the full cookie string: `Cookie: x-debug-key-v3=038663befb1ad868a62035cf5d685adb`.
 
