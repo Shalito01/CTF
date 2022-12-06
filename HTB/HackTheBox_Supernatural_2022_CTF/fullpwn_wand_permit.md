@@ -35,6 +35,7 @@ The nmap script also returns the presence of `robots.txt`, which shows 1 disallo
 We can see some usefull info:
 On version 2.3.0 it has been added the manifest plugin, with a bit of research i found that this plugin saves its configuration file in /static/manifest.json
 ![MANIFEST](./manifest.png)
+![[./manifest.png|width=250px]]
 
 We found 2 js files:
 - main-bundle.js
