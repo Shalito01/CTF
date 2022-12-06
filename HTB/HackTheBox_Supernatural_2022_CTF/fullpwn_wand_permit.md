@@ -117,4 +117,4 @@ chmod 777 sda
 ![grep](./grep.png)
 
 ### Root Flag
-![flag](./flag.png)
+![flag](./flag)
