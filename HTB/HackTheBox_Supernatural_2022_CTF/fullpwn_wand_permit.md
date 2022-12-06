@@ -30,7 +30,7 @@ by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
 ```
 As we can see we are always redirected to login page.
 The nmap script also returns the presence of `robots.txt`, which shows 1 disallowed entry: `/static/CHANGELOG.txt`:
-![CHANGELOG](./changelog.png|width=250px)
+![CHANGELOG|width=250px](./changelog.png)
 
 We can see some usefull info:
 On version 2.3.0 it has been added the manifest plugin, with a bit of research i found that this plugin saves its configuration file in /static/manifest.json
