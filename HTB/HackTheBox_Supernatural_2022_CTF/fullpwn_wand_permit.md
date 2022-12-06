@@ -30,28 +30,28 @@ by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
 ```
 As we can see we are always redirected to login page.
 The nmap script also returns the presence of `robots.txt`, which shows 1 disallowed entry: `/static/CHANGELOG.txt`:
-[CHANGELOG](./changelog.png)
+![CHANGELOG](./changelog.png)
 
 We can see some usefull info:
 On version 2.3.0 it has been added the manifest plugin, with a bit of research i found that this plugin saves its configuration file in /static/manifest.json
-[MANIFEST](./manifest.png)
+![MANIFEST](./manifest.png)
 
 We found 2 js files:
 - main-bundle.js
 - dev-48644bcc829deeffe29e-bundle.js
 
-[main-bundle](./main-bundle.png)
-[dev-bundle](./dev-bundle.png)
+![main-bundle](./main-bundle.png)
+![dev-bundle](./dev-bundle.png)
 
 In the first file I found an instresting api endpoint `/testing/dev/api/register`, but only developers can access this endpoint. So moving on the second file we can see that the function is preparing a Cookie header, and with some console.log we get the full cookie string: `Cookie: x-debug-key-v3=038663befb1ad868a62035cf5d685adb`.
 
 ### Foothold
 
 Now sending a GET request using burp to intercept the packet and adding the just found Cookie string we can access the api endpoint which returned a registration form which we can use to create a user.
-[burp](./burp.png)
+![burp](./burp.png)
 
 We can now login with the newly created user and access the pages.
-In order to schedule a meeting we need to verify our accounts so looking at verification page it tells us to upload an image with a qr code to do the verification and it gives us an example image: [wiz](./wizard_id.png)
+In order to schedule a meeting we need to verify our accounts so looking at verification page it tells us to upload an image with a qr code to do the verification and it gives us an example image: ![wiz](./wizard_id.png)
 
 I just reuploaded the example png and it got me verified. We could also decode the qrcode which returned a base45 encoded string modify it and create a new qrcode to upload.
 
@@ -114,7 +114,7 @@ chmod 777 sda
 /bin/sh
 
 ```
-[grep](./grep.png)
+![grep](./grep.png)
 
 ### Root Flag
-[flag](./flag)
+![flag](./flag)
